@@ -15,6 +15,7 @@ kubectl create secret generic \
 # Set the CABundle on the webhook registration
 CA_BUNDLE=$(base64 -w0 < webhook.crt)
 sed "s/CA_BUNDLE/${CA_BUNDLE}/" webhook-registration.yaml.tpl > webhook-registration.yaml
+sed "s/REGISTRY/${REGISTRY}/" webhook-registration.yaml.tpl > deployment.yaml
 
 # Clean
 rm webhookCA* && rm webhook.crt

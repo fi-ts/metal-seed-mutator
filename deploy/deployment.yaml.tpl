@@ -16,7 +16,7 @@ spec:
         runAsUser: 999
       containers:
         - name: metal-seed-mutator
-          image: mwennrich/metal-seed-mutator:latest
+          image: REGISTRY/fi-ts/metal-seed-mutator:latest
           ports:
           - containerPort: 8080
             protocol: TCP

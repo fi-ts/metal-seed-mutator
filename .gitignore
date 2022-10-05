@@ -1,3 +1,4 @@
+deploy/deployment.yaml
 deploy/webhook-certs.yaml
 deploy/webhook-registration.yaml
 mutator
