@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -92,7 +93,13 @@ func run() error {
 
 	// Serve.
 	logger.Infof("Listening on :8080")
-	err = http.ListenAndServeTLS(":8080", cfg.certFile, cfg.keyFile, whHandler)
+	server := &http.Server{
+		Addr:              ":8080",
+		Handler:           whHandler,
+		ReadHeaderTimeout: 1 * time.Minute,
+	}
+
+	err = server.ListenAndServeTLS(cfg.certFile, cfg.keyFile)
 	if err != nil {
 		return fmt.Errorf("error serving webhook: %w", err)
 	}
