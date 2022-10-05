@@ -28,9 +28,9 @@ webhooks:
       - nginx-ingress
   rules:
   - apiGroups:
-    - ""
+    - apps
     apiVersions:
-    - apps/v1
+    - v1
     operations:
     - CREATE
     - UPDATE
