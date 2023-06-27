@@ -65,7 +65,7 @@ func run() error {
 					logger.Infof("patching nginx-ingress-controller liveness probe")
 					c.LivenessProbe.InitialDelaySeconds = 600
 
-					if strings.HasPrefix(c.Image, "k8s.gcr.io/ingress-nginx/controller-chroot") && !slices.Contains(c.SecurityContext.Capabilities.Add, "SYS_CHROOT") {
+					if strings.Contains(c.Image, "/ingress-nginx/controller-chroot:") && !slices.Contains(c.SecurityContext.Capabilities.Add, "SYS_CHROOT") {
 						logger.Infof("patching nginx-ingress-controller with chroot image missing SYS_CHROOT capability")
 						c.SecurityContext.Capabilities.Add = append(c.SecurityContext.Capabilities.Add, "SYS_CHROOT")
 					}
