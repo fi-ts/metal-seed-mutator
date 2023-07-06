@@ -20,12 +20,6 @@ webhooks:
       operator: In
       values:
       - garden
-  objectSelector:
-    matchExpressions:
-    - key: app
-      operator: In
-      values:
-      - nginx-ingress
   rules:
   - apiGroups:
     - apps

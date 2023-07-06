@@ -61,6 +61,8 @@ func run() error {
 		return err
 	}
 
+	logger.Infof("read flags: %#v", *cfg)
+
 	// Create mutator.
 	mt := kwhmutating.MutatorFunc(func(_ context.Context, _ *kwhmodel.AdmissionReview, obj metav1.Object) (*kwhmutating.MutatorResult, error) {
 		deployment, ok := obj.(*appsv1.Deployment)
