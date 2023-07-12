@@ -12,6 +12,7 @@ import (
 	"golang.org/x/exp/slices"
 
 	appsv1 "k8s.io/api/apps/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/sirupsen/logrus"
@@ -19,11 +20,14 @@ import (
 	kwhlogrus "github.com/slok/kubewebhook/v2/pkg/log/logrus"
 	kwhmodel "github.com/slok/kubewebhook/v2/pkg/model"
 	kwhmutating "github.com/slok/kubewebhook/v2/pkg/webhook/mutating"
+
+	"github.com/metal-stack/metal-lib/pkg/pointer"
 )
 
 type config struct {
-	certFile string
-	keyFile  string
+	certFile  string
+	keyFile   string
+	mutations []string
 }
 
 func initFlags() (*config, error) {
@@ -32,12 +36,18 @@ func initFlags() (*config, error) {
 	fl := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	fl.StringVar(&cfg.certFile, "tls-cert-file", "/etc/metal-seed-mutator/cert.pem", "TLS certificate file")
 	fl.StringVar(&cfg.keyFile, "tls-key-file", "/etc/metal-seed-mutator/key.pem", "TLS key file")
+	mutations := fl.String("mutations", "nginx-ingress-controller", "the mutations to apply (comma-separated, can be nginx-ingress-controller|gardenlet)")
 
 	err := fl.Parse(os.Args[1:])
 	if err != nil {
 		return nil,
 			err
 	}
+
+	if mutations != nil {
+		cfg.mutations = strings.Split(*mutations, ",")
+	}
+
 	return cfg, nil
 }
 
@@ -51,6 +61,8 @@ func run() error {
 		return err
 	}
 
+	logger.Infof("read flags: %#v", *cfg)
+
 	// Create mutator.
 	mt := kwhmutating.MutatorFunc(func(_ context.Context, _ *kwhmodel.AdmissionReview, obj metav1.Object) (*kwhmutating.MutatorResult, error) {
 		deployment, ok := obj.(*appsv1.Deployment)
@@ -61,7 +73,7 @@ func run() error {
 		if deployment.Name == "nginx-ingress-controller" && deployment.Namespace == "garden" {
 			containers := deployment.Spec.Template.Spec.Containers
 			for i, c := range containers {
-				if c.Name == "nginx-ingress-controller" {
+				if slices.Contains(cfg.mutations, "nginx-ingress-controller") && c.Name == "nginx-ingress-controller" {
 					logger.Infof("patching nginx-ingress-controller liveness probe")
 					c.LivenessProbe.InitialDelaySeconds = 600
 
@@ -74,6 +86,12 @@ func run() error {
 
 					return &kwhmutating.MutatorResult{MutatedObject: deployment}, nil
 				}
+			}
+		} else if slices.Contains(cfg.mutations, "gardenlet") && deployment.Name == "gardenlet" && deployment.Namespace == "garden" {
+			logger.Infof("patching gardenlet pod security context")
+
+			deployment.Spec.Template.Spec.SecurityContext = &v1.PodSecurityContext{
+				FSGroup: pointer.Pointer(int64(65534)),
 			}
 		}
 
