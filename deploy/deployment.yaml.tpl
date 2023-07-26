@@ -17,8 +17,9 @@ spec:
       containers:
         - name: metal-seed-mutator
           image: REGISTRY/fi-ts/metal-seed-mutator:latest
-          # args:
-          #  - -mutations=gardenlet
+          # command:
+          #  - /mutator
+          #  - --mutations=gardenlet
           ports:
           - containerPort: 8080
             protocol: TCP

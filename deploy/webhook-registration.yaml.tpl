@@ -16,7 +16,7 @@ webhooks:
   name: metal-seed-mutator.metal-stack.dev
   namespaceSelector:
     matchExpressions:
-    - key: kubernetes.io/metadata.name
+    - key: role
       operator: In
       values:
       - garden
