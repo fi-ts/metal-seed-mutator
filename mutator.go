@@ -36,7 +36,7 @@ func initFlags() (*config, error) {
 	fl := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	fl.StringVar(&cfg.certFile, "tls-cert-file", "/etc/metal-seed-mutator/cert.pem", "TLS certificate file")
 	fl.StringVar(&cfg.keyFile, "tls-key-file", "/etc/metal-seed-mutator/key.pem", "TLS key file")
-	mutations := fl.String("mutations", "nginx-ingress-controller", "the mutations to apply (comma-separated, can be nginx-ingress-controller|gardenlet)")
+	mutations := fl.String("mutations", "nginx-ingress-controller", "the mutations to apply (comma-separated, can be nginx-ingress-controller|gardenlet|provider-gcp)")
 
 	err := fl.Parse(os.Args[1:])
 	if err != nil {
@@ -93,6 +93,10 @@ func run() error {
 			deployment.Spec.Template.Spec.SecurityContext = &v1.PodSecurityContext{
 				FSGroup: pointer.Pointer(int64(65534)),
 			}
+		} else if slices.Contains(cfg.mutations, "provider-gcp") && deployment.Name == "gardener-extension-provider-gcp" {
+			logger.Infof("removing provider-gcp pod anti affinity rule")
+
+			deployment.Spec.Template.Spec.Affinity.PodAntiAffinity = nil
 		}
 
 		logger.Infof("no mutation applied to: %s/%s", deployment.Namespace, deployment.Name)
