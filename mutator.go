@@ -36,7 +36,7 @@ func initFlags() (*config, error) {
 	fl := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	fl.StringVar(&cfg.certFile, "tls-cert-file", "/etc/metal-seed-mutator/cert.pem", "TLS certificate file")
 	fl.StringVar(&cfg.keyFile, "tls-key-file", "/etc/metal-seed-mutator/key.pem", "TLS key file")
-	mutations := fl.String("mutations", "nginx-ingress-controller", "the mutations to apply (comma-separated, can be nginx-ingress-controller|gardenlet|provider-gcp)")
+	mutations := fl.String("mutations", "nginx-ingress-controller", "the mutations to apply (comma-separated, can be nginx-ingress-controller|gardenlet|provider-gcp|gardener-resource-manager)")
 
 	err := fl.Parse(os.Args[1:])
 	if err != nil {
@@ -87,13 +87,23 @@ func run() error {
 					return &kwhmutating.MutatorResult{MutatedObject: deployment}, nil
 				}
 			}
-		} else if slices.Contains(cfg.mutations, "gardenlet") && deployment.Name == "gardenlet" && deployment.Namespace == "garden" {
+		}
+
+		if slices.Contains(cfg.mutations, "gardenlet") && deployment.Name == "gardenlet" && deployment.Namespace == "garden" {
 			logger.Infof("patching gardenlet pod security context")
 
 			deployment.Spec.Template.Spec.SecurityContext = &v1.PodSecurityContext{
 				FSGroup: pointer.Pointer(int64(65534)),
 			}
-		} else if slices.Contains(cfg.mutations, "provider-gcp") && deployment.Name == "gardener-extension-provider-gcp" {
+		}
+
+		if slices.Contains(cfg.mutations, "gardener-resource-manager") && deployment.Name == "gardener-resource-manager" && deployment.Namespace == "garden" {
+			logger.Infof("patching gardener-resource-manager readiness probe")
+
+			deployment.Spec.Template.Spec.Containers[0].ReadinessProbe = nil
+		}
+
+		if slices.Contains(cfg.mutations, "provider-gcp") && deployment.Name == "gardener-extension-provider-gcp" {
 			logger.Infof("removing provider-gcp pod anti affinity rule")
 
 			deployment.Spec.Template.Spec.Affinity.PodAntiAffinity = nil
