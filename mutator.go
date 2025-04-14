@@ -12,7 +12,7 @@ import (
 	"golang.org/x/exp/slices"
 
 	appsv1 "k8s.io/api/apps/v1"
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/sirupsen/logrus"
@@ -36,7 +36,7 @@ func initFlags() (*config, error) {
 	fl := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	fl.StringVar(&cfg.certFile, "tls-cert-file", "/etc/metal-seed-mutator/cert.pem", "TLS certificate file")
 	fl.StringVar(&cfg.keyFile, "tls-key-file", "/etc/metal-seed-mutator/key.pem", "TLS key file")
-	mutations := fl.String("mutations", "nginx-ingress-controller", "the mutations to apply (comma-separated, can be nginx-ingress-controller|gardenlet|provider-gcp|gardener-resource-manager)")
+	mutations := fl.String("mutations", "nginx-ingress-controller", "the mutations to apply (comma-separated, can be nginx-ingress-controller|gardenlet|single-node-seed|gardener-resource-manager)")
 
 	err := fl.Parse(os.Args[1:])
 	if err != nil {
@@ -92,7 +92,7 @@ func run() error {
 		if slices.Contains(cfg.mutations, "gardenlet") && deployment.Name == "gardenlet" && deployment.Namespace == "garden" {
 			logger.Infof("patching gardenlet pod security context")
 
-			deployment.Spec.Template.Spec.SecurityContext = &v1.PodSecurityContext{
+			deployment.Spec.Template.Spec.SecurityContext = &corev1.PodSecurityContext{
 				FSGroup: pointer.Pointer(int64(65534)),
 			}
 		}
@@ -103,13 +103,16 @@ func run() error {
 			deployment.Spec.Template.Spec.Containers[0].ReadinessProbe = nil
 		}
 
-		if slices.Contains(cfg.mutations, "provider-gcp") && deployment.Name == "gardener-extension-provider-gcp" {
-			logger.Infof("removing provider-gcp pod anti affinity rule")
-
-			deployment.Spec.Template.Spec.Affinity.PodAntiAffinity = nil
+		if slices.Contains(cfg.mutations, "single-node-seed") {
+			for i, topologySpread := range deployment.Spec.Template.Spec.TopologySpreadConstraints {
+				if topologySpread.WhenUnsatisfiable == corev1.DoNotSchedule {
+					deployment.Spec.Template.Spec.TopologySpreadConstraints[i].WhenUnsatisfiable = corev1.ScheduleAnyway
+					logger.Infof("patching topology do not schedule constraint for single node seed to schedule anyway")
+				}
+			}
 		}
 
-		logger.Infof("no mutation applied to: %s/%s", deployment.Namespace, deployment.Name)
+		logger.Infof("mutation applied to: %s/%s", deployment.Namespace, deployment.Name)
 
 		return &kwhmutating.MutatorResult{}, nil
 	})
