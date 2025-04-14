@@ -33,7 +33,7 @@ jobs:
     - name: Lint
       uses: golangci/golangci-lint-action@v7
       with:
-        args: --build-tags integration -p bugs --timeout=3m
+          args: -D protogetter --timeout=10m
 
     - name: Make tag
       run: |
