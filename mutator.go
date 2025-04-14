@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -15,9 +16,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/sirupsen/logrus"
 	kwhhttp "github.com/slok/kubewebhook/v2/pkg/http"
-	kwhlogrus "github.com/slok/kubewebhook/v2/pkg/log/logrus"
 	kwhmodel "github.com/slok/kubewebhook/v2/pkg/model"
 	kwhmutating "github.com/slok/kubewebhook/v2/pkg/webhook/mutating"
 
@@ -52,76 +51,32 @@ func initFlags() (*config, error) {
 }
 
 func run() error {
-	logrusLogEntry := logrus.NewEntry(logrus.New())
-	logrusLogEntry.Logger.SetLevel(logrus.DebugLevel)
-	logger := kwhlogrus.NewLogrus(logrusLogEntry)
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
 	cfg, err := initFlags()
 	if err != nil {
 		return err
 	}
 
-	logger.Infof("read flags: %#v", *cfg)
-
 	// Create mutator.
 	mt := kwhmutating.MutatorFunc(func(_ context.Context, _ *kwhmodel.AdmissionReview, obj metav1.Object) (*kwhmutating.MutatorResult, error) {
-		deployment, ok := obj.(*appsv1.Deployment)
-		if !ok {
+		switch o := obj.(type) {
+		case *appsv1.Deployment:
+			logger.Info("mutating deployment %s/%s", o.Namespace, o.Name)
+			return mutateDeployment(logger, cfg, o)
+		case *appsv1.StatefulSet:
+			logger.Info("mutating stateful set %s/%s", o.Namespace, o.Name)
+			return mutateStatefulSet(logger, cfg, o)
+		default:
 			return &kwhmutating.MutatorResult{}, nil
 		}
-
-		if deployment.Name == "nginx-ingress-controller" && deployment.Namespace == "garden" {
-			containers := deployment.Spec.Template.Spec.Containers
-			for i, c := range containers {
-				if slices.Contains(cfg.mutations, "nginx-ingress-controller") && c.Name == "nginx-ingress-controller" {
-					logger.Infof("patching nginx-ingress-controller liveness probe")
-					c.LivenessProbe.InitialDelaySeconds = 600
-
-					if strings.Contains(c.Image, "/ingress-nginx/controller-chroot:") && !slices.Contains(c.SecurityContext.Capabilities.Add, "SYS_CHROOT") {
-						logger.Infof("patching nginx-ingress-controller with chroot image missing SYS_CHROOT capability")
-						c.SecurityContext.Capabilities.Add = append(c.SecurityContext.Capabilities.Add, "SYS_CHROOT")
-					}
-
-					deployment.Spec.Template.Spec.Containers[i] = c
-
-					return &kwhmutating.MutatorResult{MutatedObject: deployment}, nil
-				}
-			}
-		}
-
-		if slices.Contains(cfg.mutations, "gardenlet") && deployment.Name == "gardenlet" && deployment.Namespace == "garden" {
-			logger.Infof("patching gardenlet pod security context")
-
-			deployment.Spec.Template.Spec.SecurityContext = &corev1.PodSecurityContext{
-				FSGroup: pointer.Pointer(int64(65534)),
-			}
-		}
-
-		if slices.Contains(cfg.mutations, "gardener-resource-manager") && deployment.Name == "gardener-resource-manager" && deployment.Namespace == "garden" {
-			logger.Infof("patching gardener-resource-manager readiness probe")
-
-			deployment.Spec.Template.Spec.Containers[0].ReadinessProbe = nil
-		}
-
-		if slices.Contains(cfg.mutations, "single-node-seed") {
-			for i, topologySpread := range deployment.Spec.Template.Spec.TopologySpreadConstraints {
-				if topologySpread.WhenUnsatisfiable == corev1.DoNotSchedule {
-					deployment.Spec.Template.Spec.TopologySpreadConstraints[i].WhenUnsatisfiable = corev1.ScheduleAnyway
-					logger.Infof("patching topology do not schedule constraint for single node seed to schedule anyway")
-				}
-			}
-		}
-
-		logger.Infof("mutation applied to: %s/%s", deployment.Namespace, deployment.Name)
-
-		return &kwhmutating.MutatorResult{}, nil
 	})
 
 	// Create webhook.
 	mcfg := kwhmutating.WebhookConfig{
 		ID:      "metal-seed-mutator.metal-stack.dev",
 		Mutator: mt,
-		Logger:  logger,
+		Logger:  nil,
 	}
 	wh, err := kwhmutating.NewWebhook(mcfg)
 	if err != nil {
@@ -129,13 +84,14 @@ func run() error {
 	}
 
 	// Get HTTP handler from webhook.
-	whHandler, err := kwhhttp.HandlerFor(kwhhttp.HandlerConfig{Webhook: wh, Logger: logger})
+	whHandler, err := kwhhttp.HandlerFor(kwhhttp.HandlerConfig{Webhook: wh})
 	if err != nil {
 		return fmt.Errorf("error creating webhook handler: %w", err)
 	}
 
 	// Serve.
-	logger.Infof("Listening on :8080")
+	logger.Info("Listening on :8080")
+
 	server := &http.Server{
 		Addr:              ":8080",
 		Handler:           whHandler,
@@ -156,4 +112,71 @@ func main() {
 		fmt.Fprintf(os.Stderr, "error running app: %s", err)
 		os.Exit(1)
 	}
+}
+
+func mutateDeployment(logger *slog.Logger, cfg *config, deployment *appsv1.Deployment) (*kwhmutating.MutatorResult, error) {
+	if deployment.Name == "nginx-ingress-controller" && deployment.Namespace == "garden" {
+		containers := deployment.Spec.Template.Spec.Containers
+		for i, c := range containers {
+			if slices.Contains(cfg.mutations, "nginx-ingress-controller") && c.Name == "nginx-ingress-controller" {
+				logger.Info("patching nginx-ingress-controller liveness probe")
+
+				c.LivenessProbe.InitialDelaySeconds = 600
+
+				if strings.Contains(c.Image, "/ingress-nginx/controller-chroot:") && !slices.Contains(c.SecurityContext.Capabilities.Add, "SYS_CHROOT") {
+					logger.Info("patching nginx-ingress-controller with chroot image missing SYS_CHROOT capability")
+
+					c.SecurityContext.Capabilities.Add = append(c.SecurityContext.Capabilities.Add, "SYS_CHROOT")
+				}
+
+				deployment.Spec.Template.Spec.Containers[i] = c
+			}
+		}
+	}
+
+	if slices.Contains(cfg.mutations, "gardenlet") && deployment.Name == "gardenlet" && deployment.Namespace == "garden" {
+		logger.Info("patching gardenlet pod security context")
+
+		deployment.Spec.Template.Spec.SecurityContext = &corev1.PodSecurityContext{
+			FSGroup: pointer.Pointer(int64(65534)),
+		}
+	}
+
+	if slices.Contains(cfg.mutations, "gardener-resource-manager") && deployment.Name == "gardener-resource-manager" && deployment.Namespace == "garden" {
+		logger.Info("patching gardener-resource-manager readiness probe")
+
+		deployment.Spec.Template.Spec.Containers[0].ReadinessProbe = nil
+	}
+
+	if slices.Contains(cfg.mutations, "single-node-seed") {
+		if deployment.Name == "gardener-extension-provider-gcp" {
+			logger.Info("removing provider-gcp pod anti affinity rule")
+
+			deployment.Spec.Template.Spec.Affinity.PodAntiAffinity = nil
+		}
+
+		for i, topologySpread := range deployment.Spec.Template.Spec.TopologySpreadConstraints {
+			if topologySpread.WhenUnsatisfiable == corev1.DoNotSchedule {
+				deployment.Spec.Template.Spec.TopologySpreadConstraints[i].WhenUnsatisfiable = corev1.ScheduleAnyway
+
+				logger.Info("patching topology do not schedule constraint for single node seed to schedule anyway")
+			}
+		}
+	}
+
+	return &kwhmutating.MutatorResult{MutatedObject: deployment}, nil
+}
+
+func mutateStatefulSet(logger *slog.Logger, cfg *config, sts *appsv1.StatefulSet) (*kwhmutating.MutatorResult, error) {
+	if slices.Contains(cfg.mutations, "single-node-seed") {
+		for i, topologySpread := range sts.Spec.Template.Spec.TopologySpreadConstraints {
+			if topologySpread.WhenUnsatisfiable == corev1.DoNotSchedule {
+				sts.Spec.Template.Spec.TopologySpreadConstraints[i].WhenUnsatisfiable = corev1.ScheduleAnyway
+
+				logger.Info("patching topology do not schedule constraint for single node seed to schedule anyway")
+			}
+		}
+	}
+
+	return &kwhmutating.MutatorResult{MutatedObject: sts}, nil
 }
