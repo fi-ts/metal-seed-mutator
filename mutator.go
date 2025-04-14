@@ -62,11 +62,11 @@ func run() error {
 	mt := kwhmutating.MutatorFunc(func(_ context.Context, _ *kwhmodel.AdmissionReview, obj metav1.Object) (*kwhmutating.MutatorResult, error) {
 		switch o := obj.(type) {
 		case *appsv1.Deployment:
-			logger.Info("mutating deployment %s/%s", o.Namespace, o.Name)
-			return mutateDeployment(logger, cfg, o)
+			log := logger.With("object", "deployment", "namespace", o.Namespace, "name", o.Name)
+			return mutateDeployment(log, cfg, o)
 		case *appsv1.StatefulSet:
-			logger.Info("mutating stateful set %s/%s", o.Namespace, o.Name)
-			return mutateStatefulSet(logger, cfg, o)
+			log := logger.With("object", "statefulSet", "namespace", o.Namespace, "name", o.Name)
+			return mutateStatefulSet(log, cfg, o)
 		default:
 			return &kwhmutating.MutatorResult{}, nil
 		}
