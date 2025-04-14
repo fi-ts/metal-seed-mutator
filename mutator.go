@@ -172,6 +172,7 @@ func mutateStatefulSet(logger *slog.Logger, cfg *config, sts *appsv1.StatefulSet
 		for i, topologySpread := range sts.Spec.Template.Spec.TopologySpreadConstraints {
 			if topologySpread.WhenUnsatisfiable == corev1.DoNotSchedule {
 				sts.Spec.Template.Spec.TopologySpreadConstraints[i].WhenUnsatisfiable = corev1.ScheduleAnyway
+				sts.Spec.Template.Spec.TopologySpreadConstraints[i].MinDomains = nil
 
 				logger.Info("patching topology do not schedule constraint for single node seed to schedule anyway")
 			}
