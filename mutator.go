@@ -158,6 +158,7 @@ func mutateDeployment(logger *slog.Logger, cfg *config, deployment *appsv1.Deplo
 		for i, topologySpread := range deployment.Spec.Template.Spec.TopologySpreadConstraints {
 			if topologySpread.WhenUnsatisfiable == corev1.DoNotSchedule {
 				deployment.Spec.Template.Spec.TopologySpreadConstraints[i].WhenUnsatisfiable = corev1.ScheduleAnyway
+				deployment.Spec.Template.Spec.TopologySpreadConstraints[i].MinDomains = nil
 
 				logger.Info("patching topology do not schedule constraint for single node seed to schedule anyway")
 			}

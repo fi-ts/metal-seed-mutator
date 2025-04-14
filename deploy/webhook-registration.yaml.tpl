@@ -20,10 +20,6 @@ webhooks:
       operator: In
       values:
       - garden
-#    - key: controllerregistration.core.gardener.cloud/name
-#      operator: In
-#      values:
-#      - provider-gcp
   rules:
   - apiGroups:
     - apps
@@ -34,5 +30,6 @@ webhooks:
     - UPDATE
     resources:
     - deployments
+    - statefulsets
     scope: 'Namespaced'
   sideEffects: None
