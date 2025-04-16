@@ -30,7 +30,7 @@ func initFlags() (*config, error) {
 	fl := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	fl.StringVar(&cfg.certFile, "tls-cert-file", "/etc/metal-seed-mutator/cert.pem", "TLS certificate file")
 	fl.StringVar(&cfg.keyFile, "tls-key-file", "/etc/metal-seed-mutator/key.pem", "TLS key file")
-	mutations := fl.String("mutations", "nginx-ingress-controller", "the mutations to apply (comma-separated, can be nginx-ingress-controller|gardenlet|single-node-seed|gardener-resource-manager)")
+	mutations := fl.String("mutations", "single-node-seed", "the mutations to apply (comma-separated, can be nginx-ingress-controller|gardenlet|single-node-seed|gardener-resource-manager)")
 
 	err := fl.Parse(os.Args[1:])
 	if err != nil {
