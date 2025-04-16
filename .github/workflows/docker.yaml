@@ -35,6 +35,10 @@ jobs:
       with:
           args: -D protogetter --timeout=10m
 
+    - name: Build
+      run: |
+        make
+
     - name: Make tag
       run: |
         [ "${GITHUB_EVENT_NAME}" == 'pull_request' ] && echo "tag=${GITHUB_HEAD_REF##*/}" >> $GITHUB_ENV || true
