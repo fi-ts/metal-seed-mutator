@@ -30,5 +30,6 @@ webhooks:
     - UPDATE
     resources:
     - deployments
+    - statefulsets
     scope: 'Namespaced'
   sideEffects: None
